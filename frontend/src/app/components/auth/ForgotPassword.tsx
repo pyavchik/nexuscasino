@@ -43,18 +43,28 @@ export function ForgotPassword({ open, onOpenChange, onResetRequested }: ForgotP
     }
 
     setLoading(true);
+    console.log('🔵 [ForgotPassword] Starting password reset request for:', email);
 
     try {
+      console.log('🔵 [ForgotPassword] Calling apiClient.requestPasswordReset...');
       const response = await apiClient.requestPasswordReset(email);
+      console.log('✅ [ForgotPassword] Response received:', response);
+      
       // Token is only returned if email is disabled (development mode)
       if (response.token) {
+        console.log('🔵 [ForgotPassword] Token received (dev mode):', response.token.substring(0, 20) + '...');
         setResetToken(response.token);
         if (onResetRequested) {
           onResetRequested(response.token);
         }
+      } else {
+        console.log('✅ [ForgotPassword] Email mode - no token returned');
       }
       setSuccess(true);
     } catch (err: any) {
+      console.error('❌ [ForgotPassword] Error:', err);
+      console.error('❌ [ForgotPassword] Error message:', err.message);
+      console.error('❌ [ForgotPassword] Error stack:', err.stack);
       setError(err.message || 'Failed to request password reset');
     } finally {
       setLoading(false);
