@@ -20,23 +20,7 @@ spring:
   websocket:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:3000}
 
-server:
-  port: ${PORT:8080}
-
-jwt:
-  secret: ${JWT_SECRET:your-256-bit-secret-key-change-this-in-production-minimum-32-characters}
-  expiration: ${JWT_EXPIRATION:86400000} # 24 hours in milliseconds
-
-logging:
-  level:
-    com.nexus.casino: DEBUG
-    org.springframework.security: DEBUG
-    org.springframework.mail: DEBUG
-    com.sun.mail: DEBUG
-    javax.mail: DEBUG
-
-# Email Configuration
-spring:
+  # Email Configuration
   mail:
     enabled: ${EMAIL_ENABLED:true}
     host: ${SMTP_HOST:smtp.gmail.com}
@@ -52,6 +36,21 @@ spring:
           connectiontimeout: 5000
           timeout: 5000
           writetimeout: 5000
+
+server:
+  port: ${PORT:8080}
+
+jwt:
+  secret: ${JWT_SECRET:your-256-bit-secret-key-change-this-in-production-minimum-32-characters}
+  expiration: ${JWT_EXPIRATION:86400000} # 24 hours in milliseconds
+
+logging:
+  level:
+    com.nexus.casino: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.mail: DEBUG
+    com.sun.mail: DEBUG
+    javax.mail: DEBUG
 
 # Application Configuration
 app:
