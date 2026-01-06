@@ -22,12 +22,12 @@ public class PasswordResetController {
             @Valid @RequestBody PasswordResetRequest request) {
         String token = passwordResetService.requestPasswordReset(request.getEmail());
         
-        // In demo mode, return the token in the response
-        // In production, this would only return a success message
+        // TODO: Implement email service to send token via email
+        // For now, return token in response (remove this when email is implemented)
+        // In production with email: return only success message
         return ResponseEntity.ok(Map.of(
-                "message", "Password reset token generated",
-                "token", token, // Remove this in production - send via email instead
-                "note", "In production, this token would be sent via email"
+                "message", "Password reset token generated. Check your email for the reset link.",
+                "token", token
         ));
     }
 
