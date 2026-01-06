@@ -135,3 +135,23 @@ docker-images/
 
 # Deployment scripts (keep deploy.sh)
 !deploy.sh
+
+# Test scripts with sensitive information
+test-ssh-connection.sh
+*-with-secrets.sh
+*-with-password.sh
+
+# SSH keys and credentials
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+*.ppk
+known_hosts
+.ssh/
+
+# Credentials and secrets
+credentials.json
+secrets.json
+*.secret
+*.credential
