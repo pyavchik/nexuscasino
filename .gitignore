@@ -128,8 +128,8 @@ extracted_figma/
 !.dockerignore
 !docker-compose.prod.yml
 
-# Jenkins
-Jenkinsfile.password
+# Jenkins - keep Jenkinsfile.password (it doesn't contain secrets, just references)
+# Jenkinsfile.password
 docker-images/
 *.tar
 
