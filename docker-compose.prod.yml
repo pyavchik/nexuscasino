@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: nexus-casino-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-nexus_casino}
+      POSTGRES_USER: ${DB_USER:-casino_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-casino_pass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-casino_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - casino-network
+
+  backend:
+    image: nexus-casino-backend:latest
+    container_name: nexus-casino-backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-nexus_casino}
+      DB_USER: ${DB_USER:-casino_user}
+      DB_PASSWORD: ${DB_PASSWORD:-casino_pass}
+      JWT_SECRET: ${JWT_SECRET:-your-256-bit-secret-key-change-this-in-production-minimum-32-characters}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://70.34.253.164:5173,http://70.34.253.164:80,http://localhost:5173}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - casino-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/auth/me"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    image: nexus-casino-frontend:latest
+    container_name: nexus-casino-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - casino-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  casino-network:
+    driver: bridge
+

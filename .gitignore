@@ -126,3 +126,12 @@ extracted_figma/
 !Dockerfile
 !docker-compose.yml
 !.dockerignore
+!docker-compose.prod.yml
+
+# Jenkins
+Jenkinsfile.password
+docker-images/
+*.tar
+
+# Deployment scripts (keep deploy.sh)
+!deploy.sh
