@@ -32,6 +32,13 @@ services:
       JWT_SECRET: ${JWT_SECRET:-your-256-bit-secret-key-change-this-in-production-minimum-32-characters}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://pyavchik.space,https://www.pyavchik.space,http://localhost:5173}
+      # Email Configuration
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-true}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      FRONTEND_URL: ${FRONTEND_URL:-https://pyavchik.space}
     # Backend port not exposed - only accessible via nginx frontend
     depends_on:
       postgres:

@@ -132,8 +132,8 @@ class ApiClient {
   }
 
   // Password reset endpoints
-  async requestPasswordReset(email: string): Promise<{ message: string; token: string }> {
-    return this.request<{ message: string; token: string }>('/auth/password-reset/request', {
+  async requestPasswordReset(email: string): Promise<{ message: string; token?: string }> {
+    return this.request<{ message: string; token?: string }>('/auth/password-reset/request', {
       method: 'POST',
       body: JSON.stringify({ email }),
     });

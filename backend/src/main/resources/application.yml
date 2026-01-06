@@ -32,3 +32,26 @@ logging:
     com.nexus.casino: DEBUG
     org.springframework.security: DEBUG
 
+# Email Configuration
+spring:
+  mail:
+    enabled: ${EMAIL_ENABLED:true}
+    host: ${SMTP_HOST:smtp.gmail.com}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+# Application Configuration
+app:
+  frontend:
+    url: ${FRONTEND_URL:https://pyavchik.space}
+

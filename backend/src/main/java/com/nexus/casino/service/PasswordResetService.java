@@ -6,6 +6,7 @@ import com.nexus.casino.repository.PasswordResetTokenRepository;
 import com.nexus.casino.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,7 +24,11 @@ public class PasswordResetService {
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository tokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EmailService emailService;
     private final SecureRandom secureRandom = new SecureRandom();
+
+    @Value("${spring.mail.enabled:true}")
+    private boolean emailEnabled;
 
     @Transactional
     public String requestPasswordReset(String email) {
@@ -54,9 +59,22 @@ public class PasswordResetService {
         
         log.info("Password reset token generated for user: {}", email);
         
-        // In demo mode, return the token directly
-        // In production, this would be sent via email
-        return token;
+        // Send email with reset token
+        try {
+            emailService.sendPasswordResetEmail(user.getEmail(), token);
+            log.info("Password reset email sent to: {}", email);
+        } catch (Exception e) {
+            log.error("Failed to send password reset email to: {}", email, e);
+            // If email fails and email is enabled, still return token for manual use
+            // In production, you might want to handle this differently
+            if (emailEnabled) {
+                throw new RuntimeException("Failed to send password reset email. Please try again later.");
+            }
+        }
+        
+        // Return token only if email is disabled (for development/testing)
+        // In production with email enabled, this should return a generic message
+        return emailEnabled ? "Email sent" : token;
     }
 
     @Transactional

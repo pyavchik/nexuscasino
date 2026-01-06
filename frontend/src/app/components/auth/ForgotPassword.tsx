@@ -46,11 +46,14 @@ export function ForgotPassword({ open, onOpenChange, onResetRequested }: ForgotP
 
     try {
       const response = await apiClient.requestPasswordReset(email);
-      setResetToken(response.token);
-      setSuccess(true);
-      if (onResetRequested) {
-        onResetRequested(response.token);
+      // Token is only returned if email is disabled (development mode)
+      if (response.token) {
+        setResetToken(response.token);
+        if (onResetRequested) {
+          onResetRequested(response.token);
+        }
       }
+      setSuccess(true);
     } catch (err: any) {
       setError(err.message || 'Failed to request password reset');
     } finally {
@@ -153,69 +156,107 @@ export function ForgotPassword({ open, onOpenChange, onResetRequested }: ForgotP
           </form>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-start gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-              <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <div className="text-green-400 font-semibold">Password Reset Token</div>
-                <div className="text-slate-400 text-sm mt-1">
-                  Use the token below to reset your password. 
-                  <span className="text-yellow-400"> This token expires in 1 hour.</span>
+            {resetToken ? (
+              // Development mode: Show token
+              <>
+                <div className="flex items-start gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="text-green-400 font-semibold">Password Reset Token</div>
+                    <div className="text-slate-400 text-sm mt-1">
+                      Use the token below to reset your password. 
+                      <span className="text-yellow-400"> This token expires in 1 hour.</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label className="text-slate-300">Reset Token</Label>
-              <div className="relative">
-                <div className="p-3 pr-12 bg-slate-800 border border-slate-700 rounded-lg font-mono text-sm text-purple-400 break-all select-all">
-                  {resetToken}
+                
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Reset Token</Label>
+                  <div className="relative">
+                    <div className="p-3 pr-12 bg-slate-800 border border-slate-700 rounded-lg font-mono text-sm text-purple-400 break-all select-all">
+                      {resetToken}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(resetToken);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        } catch (err) {
+                          const textArea = document.createElement('textarea');
+                          textArea.value = resetToken;
+                          document.body.appendChild(textArea);
+                          textArea.select();
+                          document.execCommand('copy');
+                          document.body.removeChild(textArea);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                      title="Copy to clipboard"
+                    >
+                      {copied ? (
+                        <Check className="w-4 h-4 text-green-400" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                    Token expires in 1 hour
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(resetToken);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    } catch (err) {
-                      const textArea = document.createElement('textarea');
-                      textArea.value = resetToken;
-                      document.body.appendChild(textArea);
-                      textArea.select();
-                      document.execCommand('copy');
-                      document.body.removeChild(textArea);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
+                
+                <Button
+                  onClick={() => {
+                    if (onResetRequested && resetToken) {
+                      onResetRequested(resetToken);
                     }
+                    onOpenChange(false);
+                    resetForm();
                   }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
-                  title="Copy to clipboard"
+                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-11"
                 >
-                  {copied ? (
-                    <Check className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                Token expires in 1 hour
-              </div>
-            </div>
-            
-            <Button
-              onClick={() => {
-                if (onResetRequested && resetToken) {
-                  onResetRequested(resetToken);
-                }
-                onOpenChange(false);
-                resetForm();
-              }}
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-11"
-            >
-              Continue to Set New Password
-            </Button>
+                  Continue to Set New Password
+                </Button>
+              </>
+            ) : (
+              // Production mode: Email sent
+              <>
+                <div className="flex items-start gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="text-green-400 font-semibold">Check Your Email</div>
+                    <div className="text-slate-400 text-sm mt-1">
+                      If an account exists with <span className="text-white">{email}</span>, 
+                      you will receive a password reset link shortly.
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+                  <div className="text-sm text-slate-300 space-y-2">
+                    <p>Please check your email inbox for the password reset link.</p>
+                    <p className="text-xs text-slate-500">
+                      The link will expire in 1 hour. If you don't see the email, check your spam folder.
+                    </p>
+                  </div>
+                </div>
+                
+                <Button
+                  onClick={() => {
+                    onOpenChange(false);
+                    resetForm();
+                  }}
+                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-11"
+                >
+                  Close
+                </Button>
+              </>
+            )}
           </div>
         )}
       </DialogContent>
