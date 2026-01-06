@@ -60,15 +60,27 @@ public class PasswordResetService {
         log.info("Password reset token generated for user: {}", email);
         
         // Send email with reset token
+        log.info("=== Attempting to send password reset email ===");
+        log.info("User email: {}", user.getEmail());
+        log.info("Email enabled: {}", emailEnabled);
+        log.info("Token generated: {}", token.substring(0, Math.min(10, token.length())) + "...");
+        
         try {
             emailService.sendPasswordResetEmail(user.getEmail(), token);
-            log.info("Password reset email sent to: {}", email);
+            log.info("✅ Password reset email sent successfully to: {}", email);
         } catch (Exception e) {
-            log.error("Failed to send password reset email to: {}", email, e);
+            log.error("❌ Failed to send password reset email to: {}", email, e);
+            log.error("Exception details - Type: {}, Message: {}", e.getClass().getName(), e.getMessage());
+            if (e.getCause() != null) {
+                log.error("Root cause: {} - {}", e.getCause().getClass().getName(), e.getCause().getMessage());
+            }
             // If email fails and email is enabled, still return token for manual use
             // In production, you might want to handle this differently
             if (emailEnabled) {
+                log.warn("Email is enabled but sending failed. Throwing exception.");
                 throw new RuntimeException("Failed to send password reset email. Please try again later.");
+            } else {
+                log.warn("Email is disabled. Token will be returned in response.");
             }
         }
         

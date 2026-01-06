@@ -31,6 +31,9 @@ logging:
   level:
     com.nexus.casino: DEBUG
     org.springframework.security: DEBUG
+    org.springframework.mail: DEBUG
+    com.sun.mail: DEBUG
+    javax.mail: DEBUG
 
 # Email Configuration
 spring:
