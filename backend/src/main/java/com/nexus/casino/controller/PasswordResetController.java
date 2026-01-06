@@ -22,9 +22,14 @@ public class PasswordResetController {
             @Valid @RequestBody PasswordResetRequest request) {
         String result = passwordResetService.requestPasswordReset(request.getEmail());
         
-        // If email is enabled, don't return token in response (security best practice)
-        // If email is disabled (development), return token for manual testing
+        // Handle different return values from service
         if (result.equals("Email sent")) {
+            // Email was sent successfully
+            return ResponseEntity.ok(Map.of(
+                    "message", "If an account exists with this email, a password reset link has been sent."
+            ));
+        } else if (result.equals("If the email exists, a reset token has been generated.")) {
+            // Email doesn't exist - return generic message for security
             return ResponseEntity.ok(Map.of(
                     "message", "If an account exists with this email, a password reset link has been sent."
             ));
