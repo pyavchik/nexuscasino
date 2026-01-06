@@ -55,7 +55,7 @@ public class EmailService {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setTo(toEmail);
             message.setSubject("Password Reset Request - Nexus Casino");
-            message.setText(buildPasswordResetEmailBody(resetUrl, token));
+            message.setText(buildPasswordResetEmailBody(resetUrl));
             
             log.info("Email message prepared. From: {}, To: {}, Subject: {}", 
                 message.getFrom(), message.getTo(), message.getSubject());
@@ -75,7 +75,7 @@ public class EmailService {
         }
     }
 
-    private String buildPasswordResetEmailBody(String resetUrl, String token) {
+    private String buildPasswordResetEmailBody(String resetUrl) {
         return String.format("""
             Hello,
             
@@ -84,16 +84,13 @@ public class EmailService {
             Click the link below to reset your password:
             %s
             
-            Or use this token manually:
-            %s
-            
             This link will expire in 1 hour.
             
             If you did not request this password reset, please ignore this email.
             
             Best regards,
             Nexus Casino Team
-            """, resetUrl, token);
+            """, resetUrl);
     }
 }
 

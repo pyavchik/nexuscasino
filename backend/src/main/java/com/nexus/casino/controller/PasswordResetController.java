@@ -22,24 +22,10 @@ public class PasswordResetController {
             @Valid @RequestBody PasswordResetRequest request) {
         String result = passwordResetService.requestPasswordReset(request.getEmail());
         
-        // Handle different return values from service
-        if (result.equals("Email sent")) {
-            // Email was sent successfully
-            return ResponseEntity.ok(Map.of(
-                    "message", "If an account exists with this email, a password reset link has been sent."
-            ));
-        } else if (result.equals("If the email exists, a reset token has been generated.")) {
-            // Email doesn't exist - return generic message for security
-            return ResponseEntity.ok(Map.of(
-                    "message", "If an account exists with this email, a password reset link has been sent."
-            ));
-        } else {
-            // Email disabled - return token for development/testing
-            return ResponseEntity.ok(Map.of(
-                    "message", "Password reset token generated. Check your email for the reset link.",
-                    "token", result
-            ));
-        }
+        // Always return the same generic message to avoid exposing tokens in responses
+        return ResponseEntity.ok(Map.of(
+                "message", "If an account exists with this email, a password reset link has been sent."
+        ));
     }
 
     @PostMapping("/confirm")
