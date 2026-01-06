@@ -406,10 +406,6 @@ export function AuthDialog({ open, onOpenChange, onAuthSuccess }: AuthDialogProp
       <ForgotPassword
         open={showForgotPassword}
         onOpenChange={setShowForgotPassword}
-        onResetRequested={(token) => {
-          setResetToken(token);
-          setShowResetPassword(true);
-        }}
       />
 
       {/* Reset Password Dialog */}

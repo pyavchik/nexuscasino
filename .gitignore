@@ -138,8 +138,21 @@ docker-images/
 
 # Test scripts with sensitive information
 test-ssh-connection.sh
+test-ssh-connection.sh.example
 *-with-secrets.sh
 *-with-password.sh
+
+# Setup and utility scripts (not needed in repo)
+check-ssl-status.sh
+complete-ssl-setup.sh
+find-jenkins.sh
+fix-jenkins-docker.sh
+fix-ssl-setup.sh
+get-docker.sh
+setup-ssl.sh
+test-jenkins-docker.sh
+update-nginx-ssl.sh
+Jenkinsfile.password.sudo
 
 # SSH keys and credentials
 *.pem
