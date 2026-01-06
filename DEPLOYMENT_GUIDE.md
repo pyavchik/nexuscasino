@@ -2,13 +2,13 @@
 
 ## 🎯 Overview
 
-This project uses a **feature branch deployment strategy** with Jenkins CI/CD. All deployments go through Pull Requests and feature branches for safety and traceability.
+This project uses a **main branch deployment strategy** with Jenkins CI/CD. Only the `main` branch triggers deployments to production. Feature branches are used for development and testing, then merged to `main` for deployment.
 
 ## 📋 Deployment Workflow
 
 ### Standard Deployment Process
 
-1. **Create Feature Branch**
+1. **Create Feature Branch (for development)**
    ```bash
    git checkout main
    git pull origin main
@@ -23,39 +23,37 @@ This project uses a **feature branch deployment strategy** with Jenkins CI/CD. A
    git push origin feature/your-feature-name
    ```
 
-3. **Create Pull Request**
+3. **Create Pull Request (optional but recommended)**
    - Go to: https://github.com/pyavchik/nexuscasino/pulls
    - Click "New Pull Request"
    - Select your feature branch → `main`
    - Add description and reviewers (if applicable)
-   - Create PR
+   - Create PR for code review
 
-4. **Jenkins Auto-Build (if webhooks configured)**
-   - Jenkins automatically detects the PR
-   - Builds Docker images with correct HTTPS URLs
-   - Deploys to production server
+4. **Merge to Main (triggers deployment)**
+   - After code review and testing
+   - Merge PR to `main` branch
+   - **Jenkins automatically builds and deploys from `main`**
 
-5. **Manual Jenkins Build (if needed)**
-   - Go to Jenkins dashboard
-   - Select your pipeline job
-   - Click "Build with Parameters"
-   - Select branch: `feature/your-feature-name`
-   - Click "Build"
-
-6. **Verify Deployment**
+5. **Verify Deployment**
    - Check Jenkins build logs
    - Verify services are running: `https://pyavchik.space`
    - Test the new feature
    - Check browser console for errors
 
-7. **Merge PR (after verification)**
-   - If deployment is successful
-   - Merge PR to `main`
-   - Delete feature branch
+6. **Cleanup**
+   - Delete feature branch after successful deployment
 
-## 🔧 Branch Naming Conventions
+## 🔧 Branch Strategy
 
-Use these prefixes for automatic deployment:
+### Deployment Branch
+- ✅ **`main` / `master`** - **ONLY branch that deploys to production**
+  - All changes must be merged here
+  - Jenkins automatically builds and deploys on push/merge
+  - Protected branch (use PRs for code review)
+
+### Development Branches
+Use these for development (they don't deploy):
 
 - `feature/*` - New features
 - `fix/*` - Bug fixes
@@ -63,15 +61,15 @@ Use these prefixes for automatic deployment:
 - `release/*` - Release candidates
 
 **Examples:**
-- ✅ `feature/add-user-profile`
-- ✅ `fix/password-reset-error`
-- ✅ `hotfix/security-patch`
-- ✅ `release/v1.2.0`
+- `feature/add-user-profile` → Merge to `main` to deploy
+- `fix/password-reset-error` → Merge to `main` to deploy
+- `hotfix/security-patch` → Merge to `main` to deploy
+- `release/v1.2.0` → Merge to `main` to deploy
 
-**Branches that DON'T deploy:**
-- ❌ `main` / `master` - Build only, no deployment
-- ❌ `develop` - Build only, no deployment
-- ❌ Any branch not matching the patterns above
+**Workflow:**
+1. Create feature branch → Develop and test
+2. Create PR → Code review
+3. Merge to `main` → **Automatic deployment**
 
 ## 🚀 Jenkins Configuration
 

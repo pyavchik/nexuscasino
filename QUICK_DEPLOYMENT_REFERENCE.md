@@ -75,12 +75,12 @@ ssh root@70.34.253.164 "cd /opt/nexus-casino && docker compose -f docker-compose
 
 | Branch Type | Deploys? | Use Case |
 |------------|----------|----------|
-| `feature/*` | ✅ Yes | New features |
-| `fix/*` | ✅ Yes | Bug fixes |
-| `hotfix/*` | ✅ Yes | Critical fixes |
-| `release/*` | ✅ Yes | Releases |
-| `main` | ❌ No | Build only |
-| `develop` | ❌ No | Build only |
+| `main` / `master` | ✅ **Yes** | **Production deployment** |
+| `feature/*` | ❌ No | Development (merge to main to deploy) |
+| `fix/*` | ❌ No | Bug fixes (merge to main to deploy) |
+| `hotfix/*` | ❌ No | Critical fixes (merge to main to deploy) |
+| `release/*` | ❌ No | Releases (merge to main to deploy) |
+| `develop` | ❌ No | Development branch |
 
 ## 📞 Support
 
