@@ -21,6 +21,20 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+  const [resetPasswordToken, setResetPasswordToken] = useState<string | null>(null);
+
+  // Check for reset password token in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    if (token) {
+      console.log('🔵 [App] Reset password token found in URL:', token.substring(0, 20) + '...');
+      setResetPasswordToken(token);
+      setAuthDialogOpen(true);
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('token');

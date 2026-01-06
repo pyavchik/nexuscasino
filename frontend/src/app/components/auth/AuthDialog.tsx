@@ -13,6 +13,7 @@ interface AuthDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAuthSuccess: () => void;
+  initialResetToken?: string;
 }
 
 // Password strength calculation
@@ -40,7 +41,7 @@ const passwordRequirements = [
   { test: (p: string) => /[^a-zA-Z0-9]/.test(p), label: 'Contains special character' },
 ];
 
-export function AuthDialog({ open, onOpenChange, onAuthSuccess }: AuthDialogProps) {
+export function AuthDialog({ open, onOpenChange, onAuthSuccess, initialResetToken }: AuthDialogProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -50,7 +51,16 @@ export function AuthDialog({ open, onOpenChange, onAuthSuccess }: AuthDialogProp
   const [loading, setLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
-  const [resetToken, setResetToken] = useState('');
+  const [resetToken, setResetToken] = useState(initialResetToken || '');
+
+  // Open reset password dialog if token is provided via URL
+  useEffect(() => {
+    if (initialResetToken && open) {
+      console.log('🔵 [AuthDialog] Opening reset password dialog with token from URL');
+      setShowResetPassword(true);
+      setIsLogin(false); // Switch to login mode to show reset password
+    }
+  }, [initialResetToken, open]);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
