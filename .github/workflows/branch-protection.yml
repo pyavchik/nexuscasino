@@ -1,0 +1,38 @@
+name: Branch Protection
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  notify-deployment:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Deployment Notification
+        run: |
+          echo "🚀 Push to main/master branch detected!"
+          echo "✅ This will trigger Jenkins deployment to production"
+          echo ""
+          echo "Commit: ${{ github.event.head_commit.message }}"
+          echo "Author: ${{ github.event.head_commit.author.name }}"
+          echo ""
+          echo "💡 Jenkins will automatically build and deploy this commit"
+          echo "💡 Monitor Jenkins build status for deployment progress"
+
+  check-pr-merge:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: PR Check
+        run: |
+          echo "📋 Pull Request detected"
+          echo "✅ After merge, Jenkins will automatically deploy to production"
+          echo "💡 Review changes carefully before merging"
+
