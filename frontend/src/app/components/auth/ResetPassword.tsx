@@ -73,6 +73,7 @@ export function ResetPassword({ open, onOpenChange, token: initialToken, onSucce
   const passwordValid = newPassword.length >= 6;
   const confirmPasswordValid = newPassword === confirmPassword && confirmPassword.length > 0;
   const tokenValid = token.length > 20;
+  const hasPrefilledToken = Boolean(initialToken);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,30 +151,32 @@ export function ResetPassword({ open, onOpenChange, token: initialToken, onSucce
 
         {!success ? (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="reset-token" className="text-slate-300 flex items-center gap-2">
-                Reset Token
-                {touched.token && (
-                  tokenValid 
-                    ? <Check className="w-4 h-4 text-green-400" />
-                    : <X className="w-4 h-4 text-red-400" />
-                )}
-              </Label>
-              <Input
-                ref={tokenRef}
-                id="reset-token"
-                type="text"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                onBlur={() => handleBlur('token')}
-                className={`bg-slate-800 border-slate-700 text-white font-mono text-sm ${
-                  touched.token && !tokenValid ? 'border-red-500' : ''
-                }`}
-                placeholder="Paste your reset token here"
-                required
-                disabled={!!initialToken}
-              />
-            </div>
+            {!hasPrefilledToken && (
+              <div className="space-y-2">
+                <Label htmlFor="reset-token" className="text-slate-300 flex items-center gap-2">
+                  Reset Token
+                  {touched.token && (
+                    tokenValid 
+                      ? <Check className="w-4 h-4 text-green-400" />
+                      : <X className="w-4 h-4 text-red-400" />
+                  )}
+                </Label>
+                <Input
+                  ref={tokenRef}
+                  id="reset-token"
+                  type="text"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  onBlur={() => handleBlur('token')}
+                  className={`bg-slate-800 border-slate-700 text-white font-mono text-sm ${
+                    touched.token && !tokenValid ? 'border-red-500' : ''
+                  }`}
+                  placeholder="Paste your reset token here"
+                  required
+                  disabled={!!initialToken}
+                />
+              </div>
+            )}
             
             <div className="space-y-2">
               <Label htmlFor="new-password" className="text-slate-300 flex items-center gap-2">

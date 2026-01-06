@@ -61,6 +61,13 @@ export function AuthDialog({ open, onOpenChange, onAuthSuccess, initialResetToke
       setIsLogin(false); // Switch to login mode to show reset password
     }
   }, [initialResetToken, open]);
+
+  // Keep internal resetToken in sync when initialResetToken changes
+  useEffect(() => {
+    if (initialResetToken) {
+      setResetToken(initialResetToken);
+    }
+  }, [initialResetToken]);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
