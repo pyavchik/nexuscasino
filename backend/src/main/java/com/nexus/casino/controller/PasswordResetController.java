@@ -20,15 +20,21 @@ public class PasswordResetController {
     @PostMapping("/request")
     public ResponseEntity<Map<String, String>> requestPasswordReset(
             @Valid @RequestBody PasswordResetRequest request) {
-        String token = passwordResetService.requestPasswordReset(request.getEmail());
+        String result = passwordResetService.requestPasswordReset(request.getEmail());
         
-        // TODO: Implement email service to send token via email
-        // For now, return token in response (remove this when email is implemented)
-        // In production with email: return only success message
-        return ResponseEntity.ok(Map.of(
-                "message", "Password reset token generated. Check your email for the reset link.",
-                "token", token
-        ));
+        // If email is enabled, don't return token in response (security best practice)
+        // If email is disabled (development), return token for manual testing
+        if (result.equals("Email sent")) {
+            return ResponseEntity.ok(Map.of(
+                    "message", "If an account exists with this email, a password reset link has been sent."
+            ));
+        } else {
+            // Email disabled - return token for development/testing
+            return ResponseEntity.ok(Map.of(
+                    "message", "Password reset token generated. Check your email for the reset link.",
+                    "token", result
+            ));
+        }
     }
 
     @PostMapping("/confirm")
