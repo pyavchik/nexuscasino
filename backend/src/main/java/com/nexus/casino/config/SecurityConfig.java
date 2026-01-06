@@ -56,14 +56,39 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList(
-            "http://localhost:5173",
-            "http://localhost:3000",
-            "http://localhost:8080",
-            "http://127.0.0.1:5173"
-        ));
+        
+        // Get CORS origins from environment variable or use defaults
+        String corsOriginsEnv = System.getenv("CORS_ORIGINS");
+        List<String> allowedOrigins;
+        
+        if (corsOriginsEnv != null && !corsOriginsEnv.isEmpty()) {
+            // Split by comma and trim whitespace
+            allowedOrigins = Arrays.stream(corsOriginsEnv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+        } else {
+            // Default origins for development
+            allowedOrigins = Arrays.asList(
+                "http://localhost:5173",
+                "http://localhost:3000",
+                "http://localhost:8080",
+                "http://127.0.0.1:5173",
+                "https://pyavchik.space",
+                "https://www.pyavchik.space"
+            );
+        }
+        
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(List.of("*"));
+        // Restrict allowed headers to specific list for better security
+        configuration.setAllowedHeaders(Arrays.asList(
+            "Authorization",
+            "Content-Type",
+            "X-Requested-With",
+            "Accept",
+            "Origin"
+        ));
         configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
