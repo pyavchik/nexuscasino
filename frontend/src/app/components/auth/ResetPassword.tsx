@@ -144,7 +144,9 @@ export function ResetPassword({ open, onOpenChange, token: initialToken, onSucce
           <DialogDescription className="text-slate-400">
             {success 
               ? 'Your password has been successfully reset'
-              : 'Enter your reset token and choose a new password'
+              : initialToken 
+                ? 'Set a new password for your account'
+                : 'Enter your reset token (if needed) and choose a new password'
             }
           </DialogDescription>
         </DialogHeader>
