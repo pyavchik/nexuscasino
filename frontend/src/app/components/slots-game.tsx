@@ -54,11 +54,47 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
   const VISIBLE_SYMBOLS = 3; // Number of fully visible symbols
   const PARTIAL_SYMBOLS = 1; // Number of partial symbols above/below
 
+  const checkWin = useCallback((finalReels: ReelState[]) => {
+    const symbols = finalReels.map(reel => reel.finalSymbol);
+    
+    let winAmount = 0;
+    const winning: boolean[] = [false, false, false];
+
+    // Check for three of a kind
+    if (symbols[0] === symbols[1] && symbols[1] === symbols[2]) {
+      winAmount = bet * SYMBOLS[symbols[0]].multiplier;
+      winning[0] = winning[1] = winning[2] = true;
+    } 
+    // Check for two of a kind (adjacent)
+    else if (symbols[0] === symbols[1]) {
+      winAmount = bet * 1.5;
+      winning[0] = winning[1] = true;
+    } else if (symbols[1] === symbols[2]) {
+      winAmount = bet * 1.5;
+      winning[1] = winning[2] = true;
+    }
+
+    if (winAmount > 0) {
+      setLastWin(winAmount);
+      setWinningReels(winning);
+      onBalanceChange(winAmount);
+      
+      // Clear win highlight after 3 seconds
+      setTimeout(() => {
+        setWinningReels([false, false, false]);
+      }, 3000);
+    } else {
+      setWinningReels([false, false, false]);
+    }
+
+    onGamePlayed('Slots', bet, winAmount - bet);
+  }, [bet, onBalanceChange, onGamePlayed]);
+
   // Animation loop using requestAnimationFrame for smooth 60fps
   useEffect(() => {
     const animate = (currentTime: number) => {
       if (!lastTimeRef.current) lastTimeRef.current = currentTime;
-      const deltaTime = (currentTime - lastTimeRef.current) / 1000; // Convert to seconds
+      const deltaTime = Math.min((currentTime - lastTimeRef.current) / 1000, 0.1); // Cap deltaTime to prevent large jumps
       lastTimeRef.current = currentTime;
 
       setReels(prevReels => {
@@ -82,20 +118,25 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
               newIsStopping = true;
             }
           } else if (reel.isStopping) {
-            // Calculate distance to target (accounting for wrapping)
+            // Calculate distance to target
+            const totalSymbols = SYMBOLS.length;
             let distanceToTarget = reel.targetPosition - reel.position;
             
-            // If we're moving forward and close to target, calculate remaining distance
-            // Account for the fact that we want to stop exactly on the target symbol
-            const totalSymbols = SYMBOLS.length;
+            // Since we're using absolute positions that can be very large,
+            // we need to ensure we're calculating the shortest path to target
+            // Check if we should use modulo-based distance instead
+            const currentMod = ((reel.position % totalSymbols) + totalSymbols) % totalSymbols;
+            const targetMod = ((reel.targetPosition % totalSymbols) + totalSymbols) % totalSymbols;
             
-            // Normalize distance (handle wrapping)
-            if (Math.abs(distanceToTarget) > totalSymbols / 2) {
-              if (distanceToTarget > 0) {
-                distanceToTarget -= totalSymbols;
-              } else {
-                distanceToTarget += totalSymbols;
-              }
+            // Calculate modulo-based distance (shortest path around the circle)
+            let modDistance = targetMod - currentMod;
+            if (modDistance < 0) modDistance += totalSymbols;
+            if (modDistance > totalSymbols / 2) modDistance -= totalSymbols;
+            
+            // Use modulo distance if it's shorter, or if absolute distance seems wrong
+            if (Math.abs(modDistance) < Math.abs(distanceToTarget) || Math.abs(distanceToTarget) > totalSymbols * 3) {
+              // Use modulo distance, but maintain direction
+              distanceToTarget = modDistance;
             }
             
             // Calculate deceleration based on distance to target
@@ -147,18 +188,28 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
 
         // Check if all reels have stopped
         const allStopped = newReels.every(reel => !reel.isSpinning && !reel.isStopping);
-        if (allStopped && spinning) {
-          setSpinning(false);
-          checkWin(newReels);
+        const hasActiveReels = newReels.some(reel => reel.isSpinning || reel.isStopping);
+        
+        if (allStopped && hasActiveReels) {
+          // All reels stopped, check for wins
+          setTimeout(() => {
+            checkWin(newReels);
+            setSpinning(false);
+          }, 100);
+        }
+
+        // Continue animation if there are active reels
+        if (hasActiveReels) {
+          animationFrameRef.current = requestAnimationFrame(animate);
         }
 
         return newReels;
       });
-
-      animationFrameRef.current = requestAnimationFrame(animate);
     };
 
-    if (spinning || reels.some(r => r.isStopping)) {
+    // Start animation if spinning
+    if (spinning) {
+      lastTimeRef.current = performance.now();
       animationFrameRef.current = requestAnimationFrame(animate);
     }
 
@@ -167,43 +218,7 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [spinning, reels]);
-
-  const checkWin = useCallback((finalReels: ReelState[]) => {
-    const symbols = finalReels.map(reel => reel.finalSymbol);
-    
-    let winAmount = 0;
-    const winning: boolean[] = [false, false, false];
-
-    // Check for three of a kind
-    if (symbols[0] === symbols[1] && symbols[1] === symbols[2]) {
-      winAmount = bet * SYMBOLS[symbols[0]].multiplier;
-      winning[0] = winning[1] = winning[2] = true;
-    } 
-    // Check for two of a kind (adjacent)
-    else if (symbols[0] === symbols[1]) {
-      winAmount = bet * 1.5;
-      winning[0] = winning[1] = true;
-    } else if (symbols[1] === symbols[2]) {
-      winAmount = bet * 1.5;
-      winning[1] = winning[2] = true;
-    }
-
-    if (winAmount > 0) {
-      setLastWin(winAmount);
-      setWinningReels(winning);
-      onBalanceChange(winAmount);
-      
-      // Clear win highlight after 3 seconds
-      setTimeout(() => {
-        setWinningReels([false, false, false]);
-      }, 3000);
-    } else {
-      setWinningReels([false, false, false]);
-    }
-
-    onGamePlayed('Slots', bet, winAmount - bet);
-  }, [bet, onBalanceChange, onGamePlayed]);
+  }, [spinning, checkWin]);
 
   const spin = () => {
     if (spinning || balance < bet) return;
