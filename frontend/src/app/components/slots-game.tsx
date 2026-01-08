@@ -47,6 +47,8 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
   const animationFrameRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
   const spinStartTimeRef = useRef<number>(0);
+  const hasCheckedWinRef = useRef<boolean>(false);
+  const fallbackTimeoutRef = useRef<number | null>(null);
 
   // Physics constants
   const INITIAL_SPEED = 50; // symbols per second
@@ -190,12 +192,14 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
         const allStopped = newReels.every(reel => !reel.isSpinning && !reel.isStopping);
         const hasActiveReels = newReels.some(reel => reel.isSpinning || reel.isStopping);
         
-        if (allStopped && hasActiveReels) {
-          // All reels stopped, check for wins
-          setTimeout(() => {
-            checkWin(newReels);
-            setSpinning(false);
-          }, 100);
+        // If all reels have stopped and we haven't checked for wins yet
+        if (allStopped && !hasActiveReels && spinning && !hasCheckedWinRef.current) {
+          // Mark that we've checked for wins to prevent multiple calls
+          hasCheckedWinRef.current = true;
+          
+          // All reels stopped, check for wins and stop spinning
+          checkWin(newReels);
+          setSpinning(false);
         }
 
         // Continue animation if there are active reels
@@ -210,7 +214,13 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
     // Start animation if spinning
     if (spinning) {
       lastTimeRef.current = performance.now();
+      spinStartTimeRef.current = performance.now();
       animationFrameRef.current = requestAnimationFrame(animate);
+    } else {
+      // If not spinning, ensure animation stops
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     }
 
     return () => {
@@ -226,6 +236,7 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
     setSpinning(true);
     setLastWin(null);
     setWinningReels([false, false, false]);
+    hasCheckedWinRef.current = false; // Reset win check flag
     onBalanceChange(-bet);
 
     // Generate random outcomes
@@ -276,6 +287,33 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
     const now = performance.now();
     lastTimeRef.current = now;
     spinStartTimeRef.current = now;
+    
+    // Clear any existing fallback timeout
+    if (fallbackTimeoutRef.current) {
+      clearTimeout(fallbackTimeoutRef.current);
+    }
+    
+    // Fallback timeout to ensure spinning stops (max 5 seconds)
+    fallbackTimeoutRef.current = setTimeout(() => {
+      setReels(prevReels => {
+        const hasActive = prevReels.some(r => r.isSpinning || r.isStopping);
+        if (hasActive && !hasCheckedWinRef.current) {
+          // Force stop all reels
+          const stoppedReels = prevReels.map(reel => ({
+            ...reel,
+            isSpinning: false,
+            isStopping: false,
+            speed: 0,
+            position: reel.targetPosition, // Snap to target
+          }));
+          checkWin(stoppedReels);
+          setSpinning(false);
+          hasCheckedWinRef.current = true;
+          return stoppedReels;
+        }
+        return prevReels;
+      });
+    }, 5000);
   };
 
   // Render a single reel with multiple visible symbols
