@@ -73,36 +73,75 @@ echo "Step 2: Stopping existing containers..."
 $DOCKER_COMPOSE_CMD -f "$DOCKER_COMPOSE_FILE" down || true
 
 echo "Step 2.5: Checking and freeing port 80..."
-# Check if port 80 is in use
-if lsof -i :80 > /dev/null 2>&1 || netstat -tuln | grep -q ':80 ' || ss -tuln | grep -q ':80 '; then
+PORT_80_IN_USE=false
+
+# Check multiple ways if port 80 is in use
+if command -v lsof > /dev/null 2>&1 && lsof -i :80 > /dev/null 2>&1; then
+    PORT_80_IN_USE=true
+    echo "Port 80 is in use (detected via lsof)"
+elif command -v netstat > /dev/null 2>&1 && netstat -tuln 2>/dev/null | grep -q ':80 '; then
+    PORT_80_IN_USE=true
+    echo "Port 80 is in use (detected via netstat)"
+elif command -v ss > /dev/null 2>&1 && ss -tuln 2>/dev/null | grep -q ':80 '; then
+    PORT_80_IN_USE=true
+    echo "Port 80 is in use (detected via ss)"
+fi
+
+if [ "$PORT_80_IN_USE" = true ]; then
     echo "Port 80 is in use. Attempting to free it..."
     
     # Try to stop nginx service if running
-    if systemctl is-active --quiet nginx 2>/dev/null; then
-        echo "Stopping nginx service..."
-        systemctl stop nginx || true
+    if systemctl list-units --type=service 2>/dev/null | grep -q nginx; then
+        if systemctl is-active --quiet nginx 2>/dev/null; then
+            echo "Stopping nginx service..."
+            systemctl stop nginx || true
+            systemctl disable nginx 2>/dev/null || true
+        fi
     fi
     
-    # Check for Docker containers using port 80
-    CONTAINER_USING_80=$(docker ps --format "{{.ID}} {{.Ports}}" | grep ':80' | awk '{print $1}' | head -1)
+    # Try to stop apache/httpd if running
+    if systemctl list-units --type=service 2>/dev/null | grep -E 'apache2|httpd' | grep -q running; then
+        echo "Stopping apache/httpd service..."
+        systemctl stop apache2 2>/dev/null || systemctl stop httpd 2>/dev/null || true
+    fi
+    
+    # Check for Docker containers using port 80 (including stopped ones)
+    CONTAINER_USING_80=$(docker ps -a --format "{{.ID}} {{.Ports}}" 2>/dev/null | grep -E '0\.0\.0\.0:80->|:80->' | awk '{print $1}' | head -1)
     if [ ! -z "$CONTAINER_USING_80" ]; then
         echo "Stopping Docker container using port 80: $CONTAINER_USING_80"
-        docker stop "$CONTAINER_USING_80" || true
-        docker rm "$CONTAINER_USING_80" || true
+        docker stop "$CONTAINER_USING_80" 2>/dev/null || true
+        docker rm "$CONTAINER_USING_80" 2>/dev/null || true
+    fi
+    
+    # Check for any process using port 80 and kill it
+    if command -v fuser > /dev/null 2>&1; then
+        echo "Killing processes using port 80..."
+        fuser -k 80/tcp 2>/dev/null || true
     fi
     
     # Wait a moment for port to be released
-    sleep 2
+    sleep 3
     
     # Verify port is free
-    if lsof -i :80 > /dev/null 2>&1 || netstat -tuln | grep -q ':80 ' || ss -tuln | grep -q ':80 '; then
-        echo "Warning: Port 80 is still in use. Deployment may fail."
-        echo "Please manually stop the service using port 80 and try again."
+    PORT_STILL_IN_USE=false
+    if command -v lsof > /dev/null 2>&1 && lsof -i :80 > /dev/null 2>&1; then
+        PORT_STILL_IN_USE=true
+    elif command -v netstat > /dev/null 2>&1 && netstat -tuln 2>/dev/null | grep -q ':80 '; then
+        PORT_STILL_IN_USE=true
+    elif command -v ss > /dev/null 2>&1 && ss -tuln 2>/dev/null | grep -q ':80 '; then
+        PORT_STILL_IN_USE=true
+    fi
+    
+    if [ "$PORT_STILL_IN_USE" = true ]; then
+        echo "WARNING: Port 80 is still in use after cleanup attempts!"
+        echo "Attempting to identify what's using port 80..."
+        lsof -i :80 2>/dev/null || netstat -tulpn 2>/dev/null | grep ':80 ' || ss -tulpn 2>/dev/null | grep ':80 ' || echo "Could not identify process"
+        echo "Deployment will continue but may fail..."
     else
-        echo "Port 80 is now free."
+        echo "✅ Port 80 is now free."
     fi
 else
-    echo "Port 80 is available."
+    echo "✅ Port 80 is available."
 fi
 
 echo "Step 3: Removing old images (optional cleanup)..."
