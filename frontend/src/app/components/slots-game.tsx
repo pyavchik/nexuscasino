@@ -24,48 +24,68 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
   const [spinning, setSpinning] = useState(false);
   const [bet, setBet] = useState(10);
   const [lastWin, setLastWin] = useState<number | null>(null);
+  const [reelStopped, setReelStopped] = useState([false, false, false]);
 
   const spin = () => {
     if (spinning || balance < bet) return;
 
     setSpinning(true);
     setLastWin(null);
+    setReelStopped([false, false, false]);
     onBalanceChange(-bet);
 
-    // Animation: 0.5s duration * 3 repeats = 1.5s, plus max delay (0.2s for 3rd reel) = 1.7s
-    // Add buffer for smooth completion
-    const animationDuration = 0.5 * 3 + 0.2 + 0.3; // 2 seconds total
+    // Staggered stopping times for more realistic effect
+    const baseDuration = 2000; // Base 2 seconds
+    const stopTimes = [
+      baseDuration + 200,  // First reel stops at 2.2s
+      baseDuration + 400,  // Second reel stops at 2.4s
+      baseDuration + 600,  // Third reel stops at 2.6s
+    ];
     
-    setTimeout(() => {
-      const newReels = [
-        Math.floor(Math.random() * SYMBOLS.length),
-        Math.floor(Math.random() * SYMBOLS.length),
-        Math.floor(Math.random() * SYMBOLS.length),
-      ];
-      setReels(newReels);
+    // Set final reel positions
+    const newReels = [
+      Math.floor(Math.random() * SYMBOLS.length),
+      Math.floor(Math.random() * SYMBOLS.length),
+      Math.floor(Math.random() * SYMBOLS.length),
+    ];
 
-      // Check for wins
-      let winAmount = 0;
-      if (newReels[0] === newReels[1] && newReels[1] === newReels[2]) {
-        // Three of a kind
-        winAmount = bet * SYMBOLS[newReels[0]].multiplier;
-      } else if (newReels[0] === newReels[1] || newReels[1] === newReels[2]) {
-        // Two of a kind
-        winAmount = bet * 1.5;
-      }
-
-      if (winAmount > 0) {
-        setLastWin(winAmount);
-        onBalanceChange(winAmount);
-      }
-
-      onGamePlayed('Slots', bet, winAmount - bet);
-      
-      // Small delay to ensure animation completes before resetting
+    // Stop each reel at different times
+    stopTimes.forEach((stopTime, i) => {
       setTimeout(() => {
-        setSpinning(false);
-      }, 100);
-    }, animationDuration * 1000);
+        setReels(prev => {
+          const updated = [...prev];
+          updated[i] = newReels[i];
+          return updated;
+        });
+        setReelStopped(prev => {
+          const updated = [...prev];
+          updated[i] = true;
+          return updated;
+        });
+
+        // Check for wins after all reels stop
+        if (i === 2) {
+          setTimeout(() => {
+            let winAmount = 0;
+            if (newReels[0] === newReels[1] && newReels[1] === newReels[2]) {
+              // Three of a kind
+              winAmount = bet * SYMBOLS[newReels[0]].multiplier;
+            } else if (newReels[0] === newReels[1] || newReels[1] === newReels[2]) {
+              // Two of a kind
+              winAmount = bet * 1.5;
+            }
+
+            if (winAmount > 0) {
+              setLastWin(winAmount);
+              onBalanceChange(winAmount);
+            }
+
+            onGamePlayed('Slots', bet, winAmount - bet);
+            setSpinning(false);
+          }, 300);
+        }
+      }, stopTime);
+    });
   };
 
   return (
@@ -78,33 +98,141 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
         </div>
         
         {/* Reels */}
-        <div className="flex gap-4 p-8 bg-slate-900/50 rounded-2xl border-2 border-purple-500/30 overflow-hidden">
+        <motion.div 
+          className="flex gap-4 p-8 bg-slate-900/50 rounded-2xl border-2 border-purple-500/30 overflow-hidden relative"
+          animate={spinning ? {
+            borderColor: [
+              'rgba(168, 85, 247, 0.3)',
+              'rgba(236, 72, 153, 0.5)',
+              'rgba(168, 85, 247, 0.3)',
+            ],
+            boxShadow: [
+              '0 0 20px rgba(168, 85, 247, 0.2)',
+              '0 0 40px rgba(236, 72, 153, 0.4)',
+              '0 0 20px rgba(168, 85, 247, 0.2)',
+            ],
+          } : {
+            borderColor: 'rgba(168, 85, 247, 0.3)',
+            boxShadow: 'none',
+          }}
+          transition={{
+            duration: 1,
+            repeat: spinning ? Infinity : 0,
+            ease: "easeInOut"
+          }}
+        >
+          {/* Glow effect during spinning */}
+          {spinning && (
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-purple-500/20 rounded-2xl pointer-events-none"
+              animate={{
+                opacity: [0.3, 0.6, 0.3],
+              }}
+              transition={{
+                duration: 0.8,
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
+            />
+          )}
+          
           {reels.map((reelIndex, i) => {
             const Symbol = SYMBOLS[reelIndex].icon;
             const color = SYMBOLS[reelIndex].color;
+            const isStopped = reelStopped[i];
+            const isSpinning = spinning && !isStopped;
+            
             return (
               <motion.div
-                key={i}
-                className="w-28 h-28 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl flex items-center justify-center border-2 border-purple-500/50 shadow-xl"
-                animate={spinning ? { 
-                  y: [0, -120, 0],
-                  rotateX: [0, 360, 720]
+                key={`${i}-${reelIndex}-${isStopped}`}
+                className="relative w-28 h-28 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl flex items-center justify-center border-2 border-purple-500/50 shadow-xl overflow-hidden"
+                animate={isSpinning ? { 
+                  y: [0, -112, -224, -336, -448, -560, -672, -784, -896, 0],
+                  rotateX: [0, 180, 360, 540, 720, 900, 1080, 1260, 1440, 0],
+                  scale: [1, 1.03, 1, 1.03, 1],
+                } : isStopped && spinning ? {
+                  scale: [1, 1.15, 1],
+                  y: 0,
+                  rotateX: 0,
                 } : {
                   y: 0,
-                  rotateX: 0
+                  rotateX: 0,
+                  scale: 1
                 }}
-                transition={{ 
-                  duration: 0.5, 
-                  repeat: spinning ? 3 : 0,
-                  delay: spinning ? i * 0.1 : 0,
-                  ease: "easeInOut"
+                transition={isSpinning ? {
+                  duration: 0.12,
+                  repeat: Infinity,
+                  ease: "linear",
+                  times: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1]
+                } : isStopped && spinning ? {
+                  scale: {
+                    duration: 0.3,
+                    ease: [0.34, 1.56, 0.64, 1], // Elastic bounce
+                  },
+                  y: {
+                    duration: 0.3,
+                    ease: "easeOut"
+                  },
+                  rotateX: {
+                    duration: 0.3,
+                    ease: "easeOut"
+                  }
+                } : {
+                  duration: 0.4,
+                  ease: [0.34, 1.56, 0.64, 1], // Elastic ease-out for snap effect
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 25
+                }}
+                style={{
+                  filter: isSpinning ? 'blur(1px)' : 'blur(0px)',
                 }}
               >
-                <Symbol className={`w-16 h-16 ${color} drop-shadow-lg`} />
+                {/* Glow effect during spinning */}
+                {isSpinning && (
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-br from-purple-400/30 to-pink-400/30 rounded-xl"
+                    animate={{
+                      opacity: [0.3, 0.7, 0.3],
+                    }}
+                    transition={{
+                      duration: 0.4,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
+                  />
+                )}
+                
+                {/* Symbol with enhanced styling */}
+                <motion.div
+                  className="relative z-10"
+                  animate={isSpinning ? {
+                    scale: [1, 1.1, 1],
+                    rotateZ: [0, 5, -5, 0]
+                  } : {
+                    scale: 1,
+                    rotateZ: 0
+                  }}
+                  transition={isSpinning ? {
+                    duration: 0.2,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  } : {
+                    duration: 0.2,
+                    ease: "easeOut"
+                  }}
+                >
+                  <Symbol className={`w-16 h-16 ${color} drop-shadow-lg`} />
+                </motion.div>
+                
+                {/* Motion blur overlay during spinning */}
+                {isSpinning && (
+                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/5 to-transparent pointer-events-none" />
+                )}
               </motion.div>
             );
           })}
-        </div>
+        </motion.div>
 
         {/* Win Animation */}
         <AnimatePresence>
