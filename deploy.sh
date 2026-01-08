@@ -72,6 +72,39 @@ fi
 echo "Step 2: Stopping existing containers..."
 $DOCKER_COMPOSE_CMD -f "$DOCKER_COMPOSE_FILE" down || true
 
+echo "Step 2.5: Checking and freeing port 80..."
+# Check if port 80 is in use
+if lsof -i :80 > /dev/null 2>&1 || netstat -tuln | grep -q ':80 ' || ss -tuln | grep -q ':80 '; then
+    echo "Port 80 is in use. Attempting to free it..."
+    
+    # Try to stop nginx service if running
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        echo "Stopping nginx service..."
+        systemctl stop nginx || true
+    fi
+    
+    # Check for Docker containers using port 80
+    CONTAINER_USING_80=$(docker ps --format "{{.ID}} {{.Ports}}" | grep ':80' | awk '{print $1}' | head -1)
+    if [ ! -z "$CONTAINER_USING_80" ]; then
+        echo "Stopping Docker container using port 80: $CONTAINER_USING_80"
+        docker stop "$CONTAINER_USING_80" || true
+        docker rm "$CONTAINER_USING_80" || true
+    fi
+    
+    # Wait a moment for port to be released
+    sleep 2
+    
+    # Verify port is free
+    if lsof -i :80 > /dev/null 2>&1 || netstat -tuln | grep -q ':80 ' || ss -tuln | grep -q ':80 '; then
+        echo "Warning: Port 80 is still in use. Deployment may fail."
+        echo "Please manually stop the service using port 80 and try again."
+    else
+        echo "Port 80 is now free."
+    fi
+else
+    echo "Port 80 is available."
+fi
+
 echo "Step 3: Removing old images (optional cleanup)..."
 # Uncomment if you want to remove old images
 # docker image prune -f
