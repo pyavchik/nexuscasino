@@ -50,8 +50,6 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
 
   // Physics constants
   const INITIAL_SPEED = 50; // symbols per second
-  const FRICTION = 0.98; // Friction coefficient (0.98 = 2% slowdown per frame)
-  const MIN_SPEED = 0.1; // Minimum speed before stopping
   const SYMBOL_HEIGHT = 120; // Height of each symbol in pixels
   const VISIBLE_SYMBOLS = 3; // Number of fully visible symbols
   const PARTIAL_SYMBOLS = 1; // Number of partial symbols above/below
@@ -84,33 +82,59 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
               newIsStopping = true;
             }
           } else if (reel.isStopping) {
-            // Apply friction (deceleration)
-            newSpeed = reel.speed * Math.pow(FRICTION, deltaTime * 60); // Frame-rate independent
+            // Calculate distance to target (accounting for wrapping)
+            let distanceToTarget = reel.targetPosition - reel.position;
             
-            // Check if we're close to target and slow enough to snap
-            const distanceToTarget = Math.abs(reel.targetPosition - reel.position);
-            if (newSpeed < MIN_SPEED || distanceToTarget < 0.5) {
-              // Snap to final position
-              newPosition = reel.targetPosition;
-              newSpeed = 0;
-              newIsStopping = false;
-              newIsSpinning = false;
+            // If we're moving forward and close to target, calculate remaining distance
+            // Account for the fact that we want to stop exactly on the target symbol
+            const totalSymbols = SYMBOLS.length;
+            
+            // Normalize distance (handle wrapping)
+            if (Math.abs(distanceToTarget) > totalSymbols / 2) {
+              if (distanceToTarget > 0) {
+                distanceToTarget -= totalSymbols;
+              } else {
+                distanceToTarget += totalSymbols;
+              }
+            }
+            
+            // Calculate deceleration based on distance to target
+            // As we get closer, slow down more aggressively
+            const decelerationFactor = Math.max(0.85, Math.min(0.98, 0.92 + (Math.abs(distanceToTarget) / totalSymbols) * 0.06));
+            newSpeed = reel.speed * Math.pow(decelerationFactor, deltaTime * 60);
+            
+            // If very close to target and moving slowly, gradually align
+            if (Math.abs(distanceToTarget) < 0.3 && newSpeed < 2) {
+              // Gradually move towards exact target position
+              const alignmentSpeed = Math.min(0.5, Math.abs(distanceToTarget) * 2);
+              newPosition = reel.position + Math.sign(distanceToTarget) * alignmentSpeed * deltaTime;
+              newSpeed = alignmentSpeed;
+              
+              // Snap to final position when very close
+              if (Math.abs(distanceToTarget) < 0.05) {
+                newPosition = reel.targetPosition;
+                newSpeed = 0;
+                newIsStopping = false;
+                newIsSpinning = false;
+              }
             } else {
+              // Continue moving with deceleration
               newPosition = reel.position + newSpeed * deltaTime;
               
-              // Overshoot correction - bounce back if we pass target
-              if ((reel.position < reel.targetPosition && newPosition > reel.targetPosition) ||
-                  (reel.position > reel.targetPosition && newPosition < reel.targetPosition)) {
-                // Apply bounce-back with reduced speed
-                newSpeed *= -0.3; // Bounce back at 30% speed
+              // Prevent overshooting - if we're about to pass target, slow down more
+              if ((distanceToTarget > 0 && newPosition > reel.targetPosition) ||
+                  (distanceToTarget < 0 && newPosition < reel.targetPosition)) {
+                // We've reached/passed target - snap to it
+                newPosition = reel.targetPosition;
+                newSpeed = 0;
+                newIsStopping = false;
+                newIsSpinning = false;
               }
             }
           }
 
-          // Wrap position to create infinite scroll effect
-          const totalSymbols = SYMBOLS.length;
-          while (newPosition < 0) newPosition += totalSymbols;
-          while (newPosition >= totalSymbols) newPosition -= totalSymbols;
+          // Don't wrap position during animation - keep absolute position for smooth scrolling
+          // We'll only use modulo when rendering to determine which symbol to show
 
           return {
             ...reel,
@@ -192,8 +216,30 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
     // Generate random outcomes
     const newReels: ReelState[] = reels.map((_, index) => {
       const finalSymbol = Math.floor(Math.random() * SYMBOLS.length);
-      // Calculate target position (ensure it's a full symbol height)
-      const targetPosition = finalSymbol + Math.floor(Math.random() * 3) * SYMBOLS.length;
+      const currentPosition = reels[index].position;
+      const totalSymbols = SYMBOLS.length;
+      
+      // Calculate how many full cycles to scroll through (at least 3-5 cycles for realism)
+      const minCycles = 3;
+      const maxCycles = 5;
+      const cycles = minCycles + Math.floor(Math.random() * (maxCycles - minCycles + 1));
+      
+      // Calculate target position so final symbol naturally appears in center
+      // We want: (targetPosition % totalSymbols) ≈ finalSymbol (for center alignment)
+      const currentNormalized = ((currentPosition % totalSymbols) + totalSymbols) % totalSymbols;
+      const cyclesAhead = cycles * totalSymbols;
+      
+      // Calculate distance from current normalized position to final symbol
+      // Account for center offset (we want final symbol in center, not at start)
+      const centerOffset = Math.floor(VISIBLE_SYMBOLS / 2); // Usually 1 (middle of 3)
+      let distanceToFinal = finalSymbol - currentNormalized;
+      if (distanceToFinal < 0) distanceToFinal += totalSymbols;
+      
+      // Add center offset so final symbol appears in center slot
+      distanceToFinal += centerOffset;
+      
+      // Target position = current + cycles + distance to final symbol
+      const targetPosition = currentPosition + cyclesAhead + distanceToFinal;
       
       // Calculate stop time with randomization (staggered: 1.5s, 1.8s, 2.1s base)
       const baseStopTime = 1.5 + index * 0.3;
@@ -201,7 +247,7 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
       const stopTime = baseStopTime + randomVariation;
       
       return {
-        position: reels[index].position,
+        position: currentPosition,
         speed: 0,
         targetPosition,
         isSpinning: true,
@@ -222,17 +268,19 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
     const isWinning = winningReels[index];
     const isSpinning = reel.isSpinning || reel.isStopping;
     
-    // Calculate which symbols to show
-    const startSymbol = Math.floor(reel.position);
-    const offset = reel.position - startSymbol;
+    // Calculate which symbols to show using modulo for wrapping
+    const totalSymbols = SYMBOLS.length;
+    const normalizedPosition = reel.position % totalSymbols;
+    const normalizedPositionPositive = normalizedPosition < 0 ? normalizedPosition + totalSymbols : normalizedPosition;
+    const startSymbol = Math.floor(normalizedPositionPositive);
+    const offset = normalizedPositionPositive - startSymbol;
     
     // Get symbols to display (visible + partial above/below)
     const symbolsToShow: number[] = [];
     for (let i = -PARTIAL_SYMBOLS; i < VISIBLE_SYMBOLS + PARTIAL_SYMBOLS; i++) {
       let symbolIndex = startSymbol + i;
-      // Wrap around
-      while (symbolIndex < 0) symbolIndex += SYMBOLS.length;
-      while (symbolIndex >= SYMBOLS.length) symbolIndex -= SYMBOLS.length;
+      // Wrap around using modulo
+      symbolIndex = ((symbolIndex % totalSymbols) + totalSymbols) % totalSymbols;
       symbolsToShow.push(symbolIndex);
     }
 
@@ -283,7 +331,9 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
           {symbolsToShow.map((symbolIndex, i) => {
             const symbol = SYMBOLS[symbolIndex];
             const isCenter = i === PARTIAL_SYMBOLS + Math.floor(VISIBLE_SYMBOLS / 2);
-            const isFinal = !isSpinning && symbolIndex === reel.finalSymbol && isCenter;
+            // Check if this is the final symbol in the center position
+            const normalizedFinal = ((reel.finalSymbol % totalSymbols) + totalSymbols) % totalSymbols;
+            const isFinal = !isSpinning && symbolIndex === normalizedFinal && isCenter;
             
             return (
               <motion.div
