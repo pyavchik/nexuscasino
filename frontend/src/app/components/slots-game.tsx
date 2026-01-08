@@ -32,6 +32,10 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
     setLastWin(null);
     onBalanceChange(-bet);
 
+    // Animation: 0.5s duration * 3 repeats = 1.5s, plus max delay (0.2s for 3rd reel) = 1.7s
+    // Add buffer for smooth completion
+    const animationDuration = 0.5 * 3 + 0.2 + 0.3; // 2 seconds total
+    
     setTimeout(() => {
       const newReels = [
         Math.floor(Math.random() * SYMBOLS.length),
@@ -56,8 +60,12 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
       }
 
       onGamePlayed('Slots', bet, winAmount - bet);
-      setSpinning(false);
-    }, 2000);
+      
+      // Small delay to ensure animation completes before resetting
+      setTimeout(() => {
+        setSpinning(false);
+      }, 100);
+    }, animationDuration * 1000);
   };
 
   return (
@@ -81,11 +89,15 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
                 animate={spinning ? { 
                   y: [0, -120, 0],
                   rotateX: [0, 360, 720]
-                } : {}}
+                } : {
+                  y: 0,
+                  rotateX: 0
+                }}
                 transition={{ 
                   duration: 0.5, 
                   repeat: spinning ? 3 : 0,
-                  delay: i * 0.1
+                  delay: spinning ? i * 0.1 : 0,
+                  ease: "easeInOut"
                 }}
               >
                 <Symbol className={`w-16 h-16 ${color} drop-shadow-lg`} />
