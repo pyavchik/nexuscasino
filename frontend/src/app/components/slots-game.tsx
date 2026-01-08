@@ -1,16 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { motion, AnimatePresence } from 'motion/react';
-import { Cherry, Grape, Citrus, Diamond, Crown, Coins, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 
+// Classic Vegas slot symbols with multipliers
 const SYMBOLS = [
-  { icon: Cherry, name: 'cherry', multiplier: 2, color: 'text-red-500' },
-  { icon: Citrus, name: 'citrus', multiplier: 2, color: 'text-yellow-500' },
-  { icon: Grape, name: 'grape', multiplier: 3, color: 'text-purple-500' },
-  { icon: Coins, name: 'coins', multiplier: 5, color: 'text-yellow-600' },
-  { icon: Diamond, name: 'diamond', multiplier: 10, color: 'text-cyan-500' },
-  { icon: Crown, name: 'crown', multiplier: 20, color: 'text-yellow-400' },
+  { emoji: '🍒', name: 'Cherry', multiplier: 2, color: '#ef4444' },
+  { emoji: '🍋', name: 'Lemon', multiplier: 2, color: '#fbbf24' },
+  { emoji: '🍊', name: 'Orange', multiplier: 2, color: '#f97316' },
+  { emoji: '🔔', name: 'Bell', multiplier: 3, color: '#eab308' },
+  { emoji: '💎', name: 'Diamond', multiplier: 5, color: '#06b6d4' },
+  { emoji: '⭐', name: 'Star', multiplier: 5, color: '#fbbf24' },
+  { emoji: '🍇', name: 'Grape', multiplier: 3, color: '#a855f7' },
+  { emoji: '🃏', name: 'Joker', multiplier: 10, color: '#ec4899' },
+  { emoji: '7️⃣', name: 'Seven', multiplier: 20, color: '#fbbf24' },
+  { emoji: 'BAR', name: 'Bar', multiplier: 15, color: '#ffffff' },
 ];
 
 interface SlotsGameProps {
@@ -19,233 +24,419 @@ interface SlotsGameProps {
   onGamePlayed: (game: string, bet: number, result: number) => void;
 }
 
+interface ReelState {
+  position: number; // Current scroll position (in symbol heights)
+  speed: number; // Current speed (symbols per second)
+  targetPosition: number; // Target position to stop at
+  isSpinning: boolean;
+  isStopping: boolean;
+  finalSymbol: number; // The symbol index to land on
+  stopTime: number; // Time in seconds when this reel should start stopping
+}
+
 export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameProps) {
-  const [reels, setReels] = useState([0, 1, 2]);
+  const [reels, setReels] = useState<ReelState[]>([
+    { position: 0, speed: 0, targetPosition: 0, isSpinning: false, isStopping: false, finalSymbol: 0, stopTime: 0 },
+    { position: 0, speed: 0, targetPosition: 0, isSpinning: false, isStopping: false, finalSymbol: 1, stopTime: 0 },
+    { position: 0, speed: 0, targetPosition: 0, isSpinning: false, isStopping: false, finalSymbol: 2, stopTime: 0 },
+  ]);
   const [spinning, setSpinning] = useState(false);
   const [bet, setBet] = useState(10);
   const [lastWin, setLastWin] = useState<number | null>(null);
-  const [reelStopped, setReelStopped] = useState([false, false, false]);
+  const [winningReels, setWinningReels] = useState<boolean[]>([false, false, false]);
+  const animationFrameRef = useRef<number>();
+  const lastTimeRef = useRef<number>(0);
+  const spinStartTimeRef = useRef<number>(0);
+
+  // Physics constants
+  const INITIAL_SPEED = 50; // symbols per second
+  const FRICTION = 0.98; // Friction coefficient (0.98 = 2% slowdown per frame)
+  const MIN_SPEED = 0.1; // Minimum speed before stopping
+  const SYMBOL_HEIGHT = 120; // Height of each symbol in pixels
+  const VISIBLE_SYMBOLS = 3; // Number of fully visible symbols
+  const PARTIAL_SYMBOLS = 1; // Number of partial symbols above/below
+
+  // Animation loop using requestAnimationFrame for smooth 60fps
+  useEffect(() => {
+    const animate = (currentTime: number) => {
+      if (!lastTimeRef.current) lastTimeRef.current = currentTime;
+      const deltaTime = (currentTime - lastTimeRef.current) / 1000; // Convert to seconds
+      lastTimeRef.current = currentTime;
+
+      setReels(prevReels => {
+        const newReels = prevReels.map((reel) => {
+          if (!reel.isSpinning && !reel.isStopping) return reel;
+
+          let newPosition = reel.position;
+          let newSpeed = reel.speed;
+          let newIsStopping = reel.isStopping;
+          let newIsSpinning = reel.isSpinning;
+
+          if (reel.isSpinning && !reel.isStopping) {
+            // Accelerate to initial speed
+            newSpeed = Math.min(INITIAL_SPEED, reel.speed + INITIAL_SPEED * deltaTime * 5);
+            newPosition = reel.position + newSpeed * deltaTime;
+            
+            // Start stopping after the predetermined stop time
+            const elapsed = (currentTime - spinStartTimeRef.current) / 1000; // Convert to seconds
+            
+            if (elapsed > reel.stopTime) {
+              newIsStopping = true;
+            }
+          } else if (reel.isStopping) {
+            // Apply friction (deceleration)
+            newSpeed = reel.speed * Math.pow(FRICTION, deltaTime * 60); // Frame-rate independent
+            
+            // Check if we're close to target and slow enough to snap
+            const distanceToTarget = Math.abs(reel.targetPosition - reel.position);
+            if (newSpeed < MIN_SPEED || distanceToTarget < 0.5) {
+              // Snap to final position
+              newPosition = reel.targetPosition;
+              newSpeed = 0;
+              newIsStopping = false;
+              newIsSpinning = false;
+            } else {
+              newPosition = reel.position + newSpeed * deltaTime;
+              
+              // Overshoot correction - bounce back if we pass target
+              if ((reel.position < reel.targetPosition && newPosition > reel.targetPosition) ||
+                  (reel.position > reel.targetPosition && newPosition < reel.targetPosition)) {
+                // Apply bounce-back with reduced speed
+                newSpeed *= -0.3; // Bounce back at 30% speed
+              }
+            }
+          }
+
+          // Wrap position to create infinite scroll effect
+          const totalSymbols = SYMBOLS.length;
+          while (newPosition < 0) newPosition += totalSymbols;
+          while (newPosition >= totalSymbols) newPosition -= totalSymbols;
+
+          return {
+            ...reel,
+            position: newPosition,
+            speed: newSpeed,
+            isStopping: newIsStopping,
+            isSpinning: newIsSpinning,
+          };
+        });
+
+        // Check if all reels have stopped
+        const allStopped = newReels.every(reel => !reel.isSpinning && !reel.isStopping);
+        if (allStopped && spinning) {
+          setSpinning(false);
+          checkWin(newReels);
+        }
+
+        return newReels;
+      });
+
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    if (spinning || reels.some(r => r.isStopping)) {
+      animationFrameRef.current = requestAnimationFrame(animate);
+    }
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [spinning, reels]);
+
+  const checkWin = useCallback((finalReels: ReelState[]) => {
+    const symbols = finalReels.map(reel => reel.finalSymbol);
+    
+    let winAmount = 0;
+    const winning: boolean[] = [false, false, false];
+
+    // Check for three of a kind
+    if (symbols[0] === symbols[1] && symbols[1] === symbols[2]) {
+      winAmount = bet * SYMBOLS[symbols[0]].multiplier;
+      winning[0] = winning[1] = winning[2] = true;
+    } 
+    // Check for two of a kind (adjacent)
+    else if (symbols[0] === symbols[1]) {
+      winAmount = bet * 1.5;
+      winning[0] = winning[1] = true;
+    } else if (symbols[1] === symbols[2]) {
+      winAmount = bet * 1.5;
+      winning[1] = winning[2] = true;
+    }
+
+    if (winAmount > 0) {
+      setLastWin(winAmount);
+      setWinningReels(winning);
+      onBalanceChange(winAmount);
+      
+      // Clear win highlight after 3 seconds
+      setTimeout(() => {
+        setWinningReels([false, false, false]);
+      }, 3000);
+    } else {
+      setWinningReels([false, false, false]);
+    }
+
+    onGamePlayed('Slots', bet, winAmount - bet);
+  }, [bet, onBalanceChange, onGamePlayed]);
 
   const spin = () => {
     if (spinning || balance < bet) return;
 
     setSpinning(true);
     setLastWin(null);
-    setReelStopped([false, false, false]);
+    setWinningReels([false, false, false]);
     onBalanceChange(-bet);
 
-    // Staggered stopping times for more realistic effect
-    const baseDuration = 2000; // Base 2 seconds
-    const stopTimes = [
-      baseDuration + 200,  // First reel stops at 2.2s
-      baseDuration + 400,  // Second reel stops at 2.4s
-      baseDuration + 600,  // Third reel stops at 2.6s
-    ];
-    
-    // Set final reel positions
-    const newReels = [
-      Math.floor(Math.random() * SYMBOLS.length),
-      Math.floor(Math.random() * SYMBOLS.length),
-      Math.floor(Math.random() * SYMBOLS.length),
-    ];
-
-    // Stop each reel at different times
-    stopTimes.forEach((stopTime, i) => {
-      setTimeout(() => {
-        setReels(prev => {
-          const updated = [...prev];
-          updated[i] = newReels[i];
-          return updated;
-        });
-        setReelStopped(prev => {
-          const updated = [...prev];
-          updated[i] = true;
-          return updated;
-        });
-
-        // Check for wins after all reels stop
-        if (i === 2) {
-          setTimeout(() => {
-            let winAmount = 0;
-            if (newReels[0] === newReels[1] && newReels[1] === newReels[2]) {
-              // Three of a kind
-              winAmount = bet * SYMBOLS[newReels[0]].multiplier;
-            } else if (newReels[0] === newReels[1] || newReels[1] === newReels[2]) {
-              // Two of a kind
-              winAmount = bet * 1.5;
-            }
-
-            if (winAmount > 0) {
-              setLastWin(winAmount);
-              onBalanceChange(winAmount);
-            }
-
-            onGamePlayed('Slots', bet, winAmount - bet);
-            setSpinning(false);
-          }, 300);
-        }
-      }, stopTime);
+    // Generate random outcomes
+    const newReels: ReelState[] = reels.map((_, index) => {
+      const finalSymbol = Math.floor(Math.random() * SYMBOLS.length);
+      // Calculate target position (ensure it's a full symbol height)
+      const targetPosition = finalSymbol + Math.floor(Math.random() * 3) * SYMBOLS.length;
+      
+      // Calculate stop time with randomization (staggered: 1.5s, 1.8s, 2.1s base)
+      const baseStopTime = 1.5 + index * 0.3;
+      const randomVariation = (Math.random() - 0.5) * 0.2; // ±0.1s variation
+      const stopTime = baseStopTime + randomVariation;
+      
+      return {
+        position: reels[index].position,
+        speed: 0,
+        targetPosition,
+        isSpinning: true,
+        isStopping: false,
+        finalSymbol,
+        stopTime,
+      };
     });
+
+    setReels(newReels);
+    const now = performance.now();
+    lastTimeRef.current = now;
+    spinStartTimeRef.current = now;
   };
 
-  return (
-    <Card className="p-8 bg-gradient-to-br from-purple-900/40 to-pink-900/40 border-purple-500/30 backdrop-blur-xl">
-      <div className="flex flex-col items-center gap-8">
-        <div className="flex items-center gap-3">
-          <Sparkles className="w-6 h-6 text-purple-400" />
-          <h2 className="text-3xl text-white">Slot Machine</h2>
-          <Sparkles className="w-6 h-6 text-pink-400" />
-        </div>
+  // Render a single reel with multiple visible symbols
+  const renderReel = (reel: ReelState, index: number) => {
+    const isWinning = winningReels[index];
+    const isSpinning = reel.isSpinning || reel.isStopping;
+    
+    // Calculate which symbols to show
+    const startSymbol = Math.floor(reel.position);
+    const offset = reel.position - startSymbol;
+    
+    // Get symbols to display (visible + partial above/below)
+    const symbolsToShow: number[] = [];
+    for (let i = -PARTIAL_SYMBOLS; i < VISIBLE_SYMBOLS + PARTIAL_SYMBOLS; i++) {
+      let symbolIndex = startSymbol + i;
+      // Wrap around
+      while (symbolIndex < 0) symbolIndex += SYMBOLS.length;
+      while (symbolIndex >= SYMBOLS.length) symbolIndex -= SYMBOLS.length;
+      symbolsToShow.push(symbolIndex);
+    }
+
+    return (
+      <div
+        key={index}
+        className="relative w-32 h-96 overflow-hidden rounded-lg"
+        style={{
+          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #1e293b 100%)',
+          border: `3px solid ${isWinning ? '#fbbf24' : '#475569'}`,
+          boxShadow: isWinning
+            ? '0 0 30px rgba(251, 191, 36, 0.8), inset 0 0 20px rgba(251, 191, 36, 0.2)'
+            : 'inset 0 0 30px rgba(0, 0, 0, 0.5), 0 4px 20px rgba(0, 0, 0, 0.3)',
+          transition: 'all 0.3s ease',
+        }}
+      >
+        {/* Chrome/metallic frame effect */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.3) 100%)',
+            borderRadius: 'inherit',
+          }}
+        />
         
-        {/* Reels */}
-        <motion.div 
-          className="flex gap-4 p-8 bg-slate-900/50 rounded-2xl border-2 border-purple-500/30 overflow-hidden relative"
-          animate={spinning ? {
-            borderColor: [
-              'rgba(168, 85, 247, 0.3)',
-              'rgba(236, 72, 153, 0.5)',
-              'rgba(168, 85, 247, 0.3)',
-            ],
-            boxShadow: [
-              '0 0 20px rgba(168, 85, 247, 0.2)',
-              '0 0 40px rgba(236, 72, 153, 0.4)',
-              '0 0 20px rgba(168, 85, 247, 0.2)',
-            ],
-          } : {
-            borderColor: 'rgba(168, 85, 247, 0.3)',
-            boxShadow: 'none',
+        {/* Motion blur overlay during spinning */}
+        {isSpinning && (
+          <div
+            className="absolute inset-0 pointer-events-none z-10"
+            style={{
+              background: 'linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.1) 20%, rgba(255,255,255,0.1) 80%, transparent 100%)',
+              filter: 'blur(2px)',
+            }}
+          />
+        )}
+
+        {/* Symbol container with smooth scrolling */}
+        <motion.div
+          className="absolute w-full"
+          style={{
+            top: `-${offset * SYMBOL_HEIGHT}px`,
+            transition: isSpinning ? 'none' : 'top 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
           }}
-          transition={{
-            duration: 1,
-            repeat: spinning ? Infinity : 0,
-            ease: "easeInOut"
-          }}
+          animate={isSpinning ? {
+            y: 0,
+          } : {}}
         >
-          {/* Glow effect during spinning */}
-          {spinning && (
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-purple-500/20 rounded-2xl pointer-events-none"
-              animate={{
-                opacity: [0.3, 0.6, 0.3],
-              }}
-              transition={{
-                duration: 0.8,
-                repeat: Infinity,
-                ease: "easeInOut"
-              }}
-            />
-          )}
-          
-          {reels.map((reelIndex, i) => {
-            const Symbol = SYMBOLS[reelIndex].icon;
-            const color = SYMBOLS[reelIndex].color;
-            const isStopped = reelStopped[i];
-            const isSpinning = spinning && !isStopped;
+          {symbolsToShow.map((symbolIndex, i) => {
+            const symbol = SYMBOLS[symbolIndex];
+            const isCenter = i === PARTIAL_SYMBOLS + Math.floor(VISIBLE_SYMBOLS / 2);
+            const isFinal = !isSpinning && symbolIndex === reel.finalSymbol && isCenter;
             
             return (
               <motion.div
-                key={`${i}-${reelIndex}-${isStopped}`}
-                className="relative w-28 h-28 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl flex items-center justify-center border-2 border-purple-500/50 shadow-xl overflow-hidden"
-                animate={isSpinning ? { 
-                  y: [0, -112, -224, -336, -448, -560, -672, -784, -896, 0],
-                  rotateX: [0, 180, 360, 540, 720, 900, 1080, 1260, 1440, 0],
-                  scale: [1, 1.03, 1, 1.03, 1],
-                } : isStopped && spinning ? {
-                  scale: [1, 1.15, 1],
-                  y: 0,
-                  rotateX: 0,
-                } : {
-                  y: 0,
-                  rotateX: 0,
-                  scale: 1
-                }}
-                transition={isSpinning ? {
-                  duration: 0.12,
-                  repeat: Infinity,
-                  ease: "linear",
-                  times: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1]
-                } : isStopped && spinning ? {
-                  scale: {
-                    duration: 0.3,
-                    ease: [0.34, 1.56, 0.64, 1], // Elastic bounce
-                  },
-                  y: {
-                    duration: 0.3,
-                    ease: "easeOut"
-                  },
-                  rotateX: {
-                    duration: 0.3,
-                    ease: "easeOut"
-                  }
-                } : {
-                  duration: 0.4,
-                  ease: [0.34, 1.56, 0.64, 1], // Elastic ease-out for snap effect
-                  type: "spring",
-                  stiffness: 400,
-                  damping: 25
-                }}
+                key={`${index}-${symbolIndex}-${i}`}
+                className="flex items-center justify-center"
                 style={{
+                  height: `${SYMBOL_HEIGHT}px`,
+                  fontSize: '4rem',
                   filter: isSpinning ? 'blur(1px)' : 'blur(0px)',
+                  opacity: isSpinning ? 0.8 : 1,
+                  transition: 'filter 0.1s, opacity 0.1s',
+                }}
+                animate={isFinal && isWinning ? {
+                  scale: [1, 1.2, 1],
+                  rotate: [0, 5, -5, 0],
+                } : {
+                  scale: 1,
+                  rotate: 0,
+                }}
+                transition={{
+                  duration: 0.5,
+                  repeat: isFinal && isWinning ? Infinity : 0,
+                  ease: 'easeInOut',
                 }}
               >
-                {/* Glow effect during spinning */}
-                {isSpinning && (
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-br from-purple-400/30 to-pink-400/30 rounded-xl"
-                    animate={{
-                      opacity: [0.3, 0.7, 0.3],
-                    }}
-                    transition={{
-                      duration: 0.4,
-                      repeat: Infinity,
-                      ease: "easeInOut"
-                    }}
-                  />
-                )}
-                
-                {/* Symbol with enhanced styling */}
-                <motion.div
-                  className="relative z-10"
-                  animate={isSpinning ? {
-                    scale: [1, 1.1, 1],
-                    rotateZ: [0, 5, -5, 0]
-                  } : {
-                    scale: 1,
-                    rotateZ: 0
-                  }}
-                  transition={isSpinning ? {
-                    duration: 0.2,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  } : {
-                    duration: 0.2,
-                    ease: "easeOut"
+                <span
+                  style={{
+                    textShadow: isWinning
+                      ? `0 0 20px ${symbol.color}, 0 0 40px ${symbol.color}`
+                      : '0 2px 10px rgba(0,0,0,0.5)',
+                    filter: isWinning ? 'drop-shadow(0 0 10px currentColor)' : 'none',
                   }}
                 >
-                  <Symbol className={`w-16 h-16 ${color} drop-shadow-lg`} />
-                </motion.div>
-                
-                {/* Motion blur overlay during spinning */}
-                {isSpinning && (
-                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/5 to-transparent pointer-events-none" />
-                )}
+                  {symbol.emoji === 'BAR' ? (
+                    <span className="text-3xl font-bold text-white" style={{ textShadow: '0 0 10px rgba(255,255,255,0.8)' }}>
+                      BAR
+                    </span>
+                  ) : (
+                    symbol.emoji
+                  )}
+                </span>
               </motion.div>
             );
           })}
         </motion.div>
 
+        {/* Top and bottom masks for partial symbol visibility */}
+        <div
+          className="absolute top-0 left-0 right-0 h-8 pointer-events-none z-20"
+          style={{
+            background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, transparent 100%)',
+          }}
+        />
+        <div
+          className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none z-20"
+          style={{
+            background: 'linear-gradient(0deg, rgba(15, 23, 42, 0.95) 0%, transparent 100%)',
+          }}
+        />
+
+        {/* Center line indicator */}
+        <div
+          className="absolute top-1/2 left-0 right-0 h-1 pointer-events-none z-30"
+          style={{
+            transform: 'translateY(-50%)',
+            background: 'linear-gradient(90deg, transparent 0%, rgba(251, 191, 36, 0.5) 50%, transparent 100%)',
+            boxShadow: '0 0 10px rgba(251, 191, 36, 0.5)',
+          }}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <Card className="p-8 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-2 border-yellow-500/30 backdrop-blur-xl shadow-2xl">
+      <div className="flex flex-col items-center gap-8">
+        {/* Vegas-style header */}
+        <div className="flex items-center gap-4">
+          <motion.div
+            animate={{ rotate: [0, 360] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+          >
+            <Sparkles className="w-8 h-8 text-yellow-400" />
+          </motion.div>
+          <h2 className="text-4xl font-bold bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-400 bg-clip-text text-transparent drop-shadow-lg">
+            VEGAS SLOTS
+          </h2>
+          <motion.div
+            animate={{ rotate: [360, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+          >
+            <Sparkles className="w-8 h-8 text-yellow-400" />
+          </motion.div>
+        </div>
+
+        {/* Credits Display */}
+        <div className="w-full max-w-md px-6 py-4 bg-gradient-to-r from-yellow-600/20 to-yellow-500/20 rounded-xl border-2 border-yellow-500/50">
+          <div className="flex justify-between items-center">
+            <span className="text-yellow-300 font-semibold">CREDITS:</span>
+            <span className="text-2xl font-bold text-yellow-400">${balance.toLocaleString()}</span>
+          </div>
+        </div>
+
+        {/* Reels Container */}
+        <div className="relative p-6 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl border-4 border-yellow-500/40 shadow-[0_0_40px_rgba(251,191,36,0.3)]">
+          {/* Chrome frame effect */}
+          <div
+            className="absolute inset-0 pointer-events-none rounded-2xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.3) 100%)',
+            }}
+          />
+          
+          <div className="flex gap-6 relative z-10">
+            {reels.map((reel, index) => renderReel(reel, index))}
+          </div>
+        </div>
+
         {/* Win Animation */}
         <AnimatePresence>
           {lastWin !== null && lastWin > 0 && (
             <motion.div
-              initial={{ scale: 0, rotate: -180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              exit={{ scale: 0, rotate: 180 }}
+              initial={{ scale: 0, rotate: -180, opacity: 0 }}
+              animate={{ scale: 1, rotate: 0, opacity: 1 }}
+              exit={{ scale: 0, rotate: 180, opacity: 0 }}
               className="relative"
             >
-              <div className="absolute inset-0 bg-yellow-400/20 blur-2xl" />
-              <div className="relative px-8 py-4 bg-gradient-to-r from-yellow-400 to-orange-400 rounded-full">
-                <p className="text-3xl text-black">🎉 Won ${lastWin}! 🎉</p>
+              <motion.div
+                className="absolute inset-0 bg-yellow-400/30 blur-3xl"
+                animate={{
+                  scale: [1, 1.2, 1],
+                  opacity: [0.5, 0.8, 0.5],
+                }}
+                transition={{
+                  duration: 1,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+              />
+              <div className="relative px-12 py-6 bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-400 rounded-full border-4 border-yellow-500 shadow-[0_0_30px_rgba(251,191,36,0.8)]">
+                <motion.p
+                  className="text-4xl font-bold text-black"
+                  animate={{
+                    scale: [1, 1.1, 1],
+                  }}
+                  transition={{
+                    duration: 0.5,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                >
+                  🎉 JACKPOT! ${lastWin.toLocaleString()} 🎉
+                </motion.p>
               </div>
             </motion.div>
           )}
@@ -253,52 +444,68 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
 
         {/* Bet Selection */}
         <div className="flex flex-wrap gap-3 justify-center">
+          <span className="text-yellow-300 font-semibold w-full text-center mb-2">BET AMOUNT:</span>
           {[10, 25, 50, 100].map((amount) => (
             <Button
               key={amount}
               onClick={() => setBet(amount)}
               variant={bet === amount ? 'default' : 'outline'}
-              className={`min-w-20 ${
+              className={`min-w-24 h-12 text-lg font-bold ${
                 bet === amount 
-                  ? 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black border-0' 
-                  : 'border-purple-500/30 hover:bg-purple-500/10'
+                  ? 'bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-600 hover:to-yellow-500 text-black border-2 border-yellow-600 shadow-lg' 
+                  : 'border-2 border-yellow-500/50 hover:bg-yellow-500/20 text-yellow-300'
               }`}
               disabled={spinning}
-              size="lg"
             >
               ${amount}
             </Button>
           ))}
         </div>
 
-        {/* Spin Button */}
+        {/* SPIN Button */}
         <Button
           onClick={spin}
           disabled={spinning || balance < bet}
-          className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-2xl py-8 rounded-xl shadow-lg shadow-purple-500/50 border-0"
+          className="w-full max-w-md h-16 text-3xl font-bold bg-gradient-to-r from-red-600 via-red-500 to-red-600 hover:from-red-700 hover:via-red-600 hover:to-red-700 text-white border-4 border-red-700 shadow-[0_0_30px_rgba(220,38,38,0.6)] hover:shadow-[0_0_40px_rgba(220,38,38,0.8)] transition-all"
           size="lg"
         >
           {spinning ? (
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-3">
               <motion.div
                 animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }}
+                className="text-4xl"
               >
                 🎰
               </motion.div>
-              SPINNING...
+              <span>SPINNING...</span>
             </span>
           ) : (
-            `SPIN - $${bet}`
+            <span className="flex items-center gap-2">
+              <span>🎰</span>
+              <span>SPIN</span>
+              <span className="text-xl">${bet}</span>
+            </span>
           )}
         </Button>
 
         {/* Paytable */}
-        <div className="w-full p-4 bg-slate-900/50 rounded-xl border border-purple-500/20">
-          <p className="text-slate-400 text-sm text-center mb-2">Paytable</p>
-          <div className="grid grid-cols-2 gap-2 text-xs text-slate-300">
-            <div>3 Matching: Up to {Math.max(...SYMBOLS.map(s => s.multiplier))}x</div>
-            <div>2 Matching: 1.5x</div>
+        <div className="w-full max-w-2xl p-6 bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-xl border-2 border-yellow-500/30 backdrop-blur-sm">
+          <p className="text-yellow-300 font-bold text-xl text-center mb-4">PAYTABLE</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+            {SYMBOLS.map((symbol, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-2 p-2 rounded bg-slate-900/50 border border-yellow-500/20"
+              >
+                <span className="text-2xl">{symbol.emoji === 'BAR' ? 'BAR' : symbol.emoji}</span>
+                <span className="text-yellow-300">{symbol.name}</span>
+                <span className="ml-auto text-yellow-400 font-bold">{symbol.multiplier}x</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 pt-4 border-t border-yellow-500/20 text-center text-yellow-300">
+            <p className="font-semibold">2 Matching: 1.5x | 3 Matching: Symbol Multiplier</p>
           </div>
         </div>
       </div>
