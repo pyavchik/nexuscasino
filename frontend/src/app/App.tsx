@@ -78,7 +78,10 @@ export default function App() {
   const handleGamePlayed = async (game: string, bet: number, result: number) => {
     try {
       if (isAuthenticated) {
-        await apiClient.playGame(game, bet);
+        // Calculate winAmount from result (result = winAmount - bet)
+        // So winAmount = result + bet
+        const winAmount = result + bet;
+        await apiClient.playGame(game, bet, winAmount);
         await loadUserData();
       } else {
         // Demo mode - local state only

@@ -112,10 +112,14 @@ class ApiClient {
   }
 
   // Game endpoints
-  async playGame(gameType: string, bet: number): Promise<GameRecord> {
+  async playGame(gameType: string, bet: number, winAmount?: number): Promise<GameRecord> {
+    const body: any = { gameType, bet };
+    if (winAmount !== undefined) {
+      body.winAmount = winAmount;
+    }
     return this.request<GameRecord>('/games/play', {
       method: 'POST',
-      body: JSON.stringify({ gameType, bet }),
+      body: JSON.stringify(body),
     });
   }
 

@@ -32,18 +32,28 @@ public class GameService {
         // Deduct bet from balance
         userService.updateBalance(user, request.getBet().negate());
 
-        // Calculate game result based on game type
-        BigDecimal result = calculateGameResult(request.getGameType(), request.getBet());
+        // Use winAmount from frontend if provided (for games with visual outcomes like slots)
+        // Otherwise, calculate game result based on game type
+        BigDecimal winAmount;
+        if (request.getWinAmount() != null && request.getWinAmount().compareTo(BigDecimal.ZERO) >= 0) {
+            // Use frontend-provided win amount (already calculated based on visual outcome)
+            winAmount = request.getWinAmount();
+        } else {
+            // Calculate game result randomly (for backwards compatibility or non-visual games)
+            winAmount = calculateGameResult(request.getGameType(), request.getBet());
+        }
 
-        // Update balance with result
-        userService.updateBalance(user, result);
+        // Update balance with win amount
+        userService.updateBalance(user, winAmount);
 
-        // Save game record
+        // Save game record with net result (winAmount - bet)
+        // Positive = profit, Negative = loss
+        BigDecimal netResult = winAmount.subtract(request.getBet());
         GameRecord gameRecord = GameRecord.builder()
                 .user(user)
                 .gameType(request.getGameType())
                 .bet(request.getBet())
-                .result(result.subtract(request.getBet())) // Net result (win - bet)
+                .result(netResult) // Net result (winAmount - bet)
                 .build();
 
         gameRecord = gameRecordRepository.save(gameRecord);

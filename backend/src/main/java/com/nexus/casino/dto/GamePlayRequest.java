@@ -15,5 +15,9 @@ public class GamePlayRequest {
     @NotNull(message = "Bet amount is required")
     @Min(value = 1, message = "Bet must be at least 1")
     private BigDecimal bet;
+
+    // Optional: Win amount from frontend (for slots and other games with visual outcomes)
+    // If provided, this will be used instead of backend calculation
+    private BigDecimal winAmount;
 }
 
