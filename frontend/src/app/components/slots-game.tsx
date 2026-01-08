@@ -70,7 +70,7 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
         </div>
         
         {/* Reels */}
-        <div className="flex gap-4 p-8 bg-slate-900/50 rounded-2xl border-2 border-purple-500/30">
+        <div className="flex gap-4 p-8 bg-slate-900/50 rounded-2xl border-2 border-purple-500/30 overflow-hidden">
           {reels.map((reelIndex, i) => {
             const Symbol = SYMBOLS[reelIndex].icon;
             const color = SYMBOLS[reelIndex].color;
@@ -79,7 +79,7 @@ export function SlotsGame({ balance, onBalanceChange, onGamePlayed }: SlotsGameP
                 key={i}
                 className="w-28 h-28 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl flex items-center justify-center border-2 border-purple-500/50 shadow-xl"
                 animate={spinning ? { 
-                  y: [0, -300, 0],
+                  y: [0, -120, 0],
                   rotateX: [0, 360, 720]
                 } : {}}
                 transition={{ 
